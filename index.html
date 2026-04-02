@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="경기날씨">
+<meta name="theme-color" content="#1a56a0">
+<title>경기 날씨</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #0f1923;
+    --card: #1a2535;
+    --card2: #1f2d40;
+    --border: rgba(255,255,255,0.07);
+    --text: #f0f4f8;
+    --sub: #8a9bb0;
+    --accent: #4a9eff;
+    --good: #34d399; --mod: #fbbf24; --bad: #f87171; --vbad: #c084fc;
+    --rain: #60a5fa;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bot: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'Helvetica Neue', sans-serif; overscroll-behavior: none; }
+
+  /* 상단 헤더 */
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(15,25,35,0.85);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    padding: calc(var(--safe-top) + 12px) 20px 12px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .header-title { flex: 1; }
+  .header-title h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+  .header-title p  { font-size: 12px; color: var(--sub); margin-top: 1px; }
+  .refresh-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(74,158,255,0.15); border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--accent); font-size: 17px;
+    transition: transform 0.3s;
+  }
+  .refresh-btn.spinning { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 탭 */
+  .tabs {
+    display: flex; gap: 8px; padding: 14px 20px 0;
+  }
+  .tab {
+    flex: 1; padding: 10px; border-radius: 14px;
+    border: 0.5px solid var(--border);
+    background: var(--card); cursor: pointer;
+    font-size: 14px; font-weight: 500; color: var(--sub);
+    transition: all 0.2s; text-align: center;
+  }
+  .tab.active {
+    background: var(--accent); color: #fff;
+    border-color: var(--accent); font-weight: 600;
+  }
+  .tab-sub { font-size: 11px; opacity: 0.7; display: block; margin-top: 2px; }
+
+  /* 스크롤 영역 */
+  .scroll { padding: 14px 20px calc(var(--safe-bot) + 24px); display: flex; flex-direction: column; gap: 12px; }
+
+  /* 현재 날씨 카드 */
+  .now-card {
+    background: linear-gradient(135deg, #1a3a6b 0%, #1a2535 100%);
+    border-radius: 22px; padding: 22px;
+    border: 0.5px solid rgba(74,158,255,0.2);
+    position: relative; overflow: hidden;
+  }
+  .now-card::before {
+    content: ''; position: absolute; top: -40px; right: -40px;
+    width: 160px; height: 160px; border-radius: 50%;
+    background: rgba(74,158,255,0.07);
+  }
+  .now-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .now-temp { font-size: 64px; font-weight: 200; line-height: 1; letter-spacing: -3px; }
+  .now-temp sup { font-size: 28px; font-weight: 300; vertical-align: top; margin-top: 10px; display: inline-block; }
+  .now-icon { font-size: 64px; line-height: 1; }
+  .now-desc { font-size: 18px; font-weight: 500; margin-top: 6px; }
+  .now-feels { font-size: 13px; color: var(--sub); margin-top: 3px; }
+  .now-updated { font-size: 11px; color: rgba(138,155,176,0.6); margin-top: 14px; }
+
+  /* 지표 그리드 */
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .metric-card {
+    background: var(--card); border-radius: 16px; padding: 14px 12px;
+    border: 0.5px solid var(--border); text-align: center;
+  }
+  .metric-icon { font-size: 20px; margin-bottom: 6px; }
+  .metric-val  { font-size: 19px; font-weight: 600; line-height: 1; }
+  .metric-unit { font-size: 11px; color: var(--sub); }
+  .metric-lbl  { font-size: 11px; color: var(--sub); margin-top: 4px; }
+
+  /* 대기질 카드 */
+  .air-card { background: var(--card); border-radius: 22px; padding: 18px; border: 0.5px solid var(--border); }
+  .section-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .section-hd h2 { font-size: 15px; font-weight: 600; }
+  .aqi-badge {
+    font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;
+  }
+  .aqi-good  { background: rgba(52,211,153,0.15); color: var(--good); }
+  .aqi-mod   { background: rgba(251,191,36,0.15);  color: var(--mod); }
+  .aqi-bad   { background: rgba(248,113,113,0.15); color: var(--bad); }
+  .aqi-vbad  { background: rgba(192,132,252,0.15); color: var(--vbad); }
+
+  .air-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .air-item { text-align: center; background: var(--card2); border-radius: 12px; padding: 12px 8px; }
+  .air-val  { font-size: 20px; font-weight: 600; }
+  .air-lbl  { font-size: 11px; color: var(--sub); margin-top: 3px; }
+  .air-unit { font-size: 10px; color: var(--sub); }
+
+  /* AQI 바 */
+  .aqi-bar-wrap { margin-top: 14px; }
+  .aqi-bar-track {
+    height: 6px; border-radius: 3px; position: relative;
+    background: linear-gradient(to right, var(--good) 0%, var(--mod) 40%, var(--bad) 70%, var(--vbad) 100%);
+  }
+  .aqi-bar-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #fff; border: 2px solid #1a2535;
+    position: absolute; top: -3px;
+    transition: left 0.6s cubic-bezier(.34,1.56,.64,1);
+  }
+  .aqi-bar-labels { display: flex; justify-content: space-between; margin-top: 5px; }
+  .aqi-bar-labels span { font-size: 10px; color: var(--sub); }
+
+  /* 주간 예보 */
+  .week-card { background: var(--card); border-radius: 22px; overflow: hidden; border: 0.5px solid var(--border); }
+  .week-card h2 { font-size: 15px; font-weight: 600; padding: 18px 18px 12px; }
+  .day-row {
+    display: flex; align-items: center; padding: 11px 18px;
+    border-top: 0.5px solid var(--border); gap: 10px;
+  }
+  .day-name { font-size: 14px; font-weight: 500; width: 36px; flex-shrink: 0; }
+  .day-icon { font-size: 22px; width: 28px; text-align: center; flex-shrink: 0; }
+  .day-desc { font-size: 12px; color: var(--sub); flex: 1; }
+  .day-pop  { font-size: 12px; color: var(--rain); width: 34px; text-align: right; flex-shrink: 0; }
+  .day-temps { font-size: 14px; font-weight: 500; width: 70px; text-align: right; flex-shrink: 0; }
+  .day-lo   { color: var(--sub); font-weight: 400; }
+
+  /* 로딩 */
+  .loading {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 60px 20px; gap: 14px; color: var(--sub);
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid rgba(74,158,255,0.2);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .loading p { font-size: 14px; }
+
+  /* 오류 */
+  .error-box {
+    background: rgba(248,113,113,0.1); border: 0.5px solid rgba(248,113,113,0.3);
+    border-radius: 16px; padding: 16px; margin: 0 20px;
+    font-size: 13px; color: var(--bad); text-align: center; line-height: 1.5;
+  }
+
+  /* 설치 안내 배너 */
+  .install-banner {
+    margin: 0 20px; background: rgba(74,158,255,0.08);
+    border: 0.5px solid rgba(74,158,255,0.25);
+    border-radius: 16px; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .install-banner .icon { font-size: 24px; flex-shrink: 0; }
+  .install-banner p { font-size: 12px; color: var(--sub); line-height: 1.5; }
+  .install-banner strong { color: var(--text); display: block; font-size: 13px; margin-bottom: 2px; }
+  .install-close {
+    background: none; border: none; color: var(--sub);
+    font-size: 18px; cursor: pointer; flex-shrink: 0; padding: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <h1 id="header-name">경기 날씨</h1>
+    <p id="header-sub">화성 동탄 · 용인 처인구</p>
+  </div>
+  <button class="refresh-btn" id="refresh-btn" onclick="refresh()" title="새로고침">↻</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" id="tab-0" onclick="switchRegion(0)">
+    화성 동탄<span class="tab-sub">산척동</span>
+  </button>
+  <button class="tab" id="tab-1" onclick="switchRegion(1)">
+    용인 처인구<span class="tab-sub">경기도</span>
+  </button>
+</div>
+
+<div id="install-banner" class="install-banner" style="margin-top:14px; display:none;">
+  <span class="icon">📲</span>
+  <p><strong>홈 화면에 추가하기</strong>사파리 하단 공유 버튼(□↑) → "홈 화면에 추가" 탭하면 앱처럼 사용 가능!</p>
+  <button class="install-close" onclick="dismissBanner()">✕</button>
+</div>
+
+<div class="scroll" id="content">
+  <div class="loading"><div class="spinner"></div><p>날씨 불러오는 중…</p></div>
+</div>
+
+<script>
+const REGIONS = [
+  { name: '화성 동탄', sub: '산척동 · 경기도 화성시', lat: 37.2099, lon: 127.0774 },
+  { name: '용인 처인구', sub: '경기도 용인시 처인구',   lat: 37.2341, lon: 127.2042 },
+];
+
+const WMO_LABEL = {
+  0:'맑음',1:'주로 맑음',2:'구름 조금',3:'흐림',
+  45:'안개',48:'안개',51:'이슬비',53:'이슬비',55:'이슬비',
+  61:'비',63:'비',65:'강한 비',71:'눈',73:'눈',75:'강한 눈',
+  77:'눈발',80:'소나기',81:'소나기',82:'강한 소나기',
+  85:'눈 소나기',86:'눈 소나기',95:'뇌우',96:'뇌우',99:'강한 뇌우'
+};
+const WMO_ICON = {
+  0:'☀️',1:'🌤️',2:'⛅',3:'☁️',
+  45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',
+  61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',73:'🌨️',75:'❄️',
+  77:'🌨️',80:'🌦️',81:'🌧️',82:'⛈️',
+  85:'🌨️',86:'❄️',95:'⛈️',96:'⛈️',99:'⛈️'
+};
+
+let cur = 0;
+let cache = [{}, {}];
+
+function wmoLabel(c){ return WMO_LABEL[c] || '흐림'; }
+function wmoIcon(c) { return WMO_ICON[c] || '☁️'; }
+
+function aqiClass(grade){
+  return ['','aqi-good','aqi-mod','aqi-bad','aqi-vbad'][grade] || 'aqi-mod';
+}
+function aqiLabel(grade){
+  return ['','좋음','보통','나쁨','매우나쁨'][grade] || '보통';
+}
+function pm25Grade(v){ return v<15?1:v<35?2:v<75?3:4; }
+function pm10Grade(v){ return v<30?1:v<80?2:v<150?3:4; }
+
+function dayName(dateStr, i){
+  if(i===0) return '오늘';
+  if(i===1) return '내일';
+  const days=['일','월','화','수','목','금','토'];
+  return days[new Date(dateStr).getDay()]+'요일';
+}
+
+async function fetchWeather(region){
+  const r = REGIONS[region];
+  const [wRes, aRes] = await Promise.all([
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${r.lat}&longitude=${r.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&timezone=Asia%2FSeoul&forecast_days=7&wind_speed_unit=ms`),
+    fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${r.lat}&longitude=${r.lon}&current=pm2_5,pm10,ozone&timezone=Asia%2FSeoul`)
+  ]);
+  const [w, a] = await Promise.all([wRes.json(), aRes.json()]);
+  return { weather: w, air: a };
+}
+
+function render(region){
+  const d = cache[region];
+  if(!d || !d.weather) return;
+
+  const w = d.weather.current;
+  const daily = d.weather.daily;
+  const a = d.air.current;
+  const now = new Date();
+  const timeStr = now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0') + ' 기준';
+
+  const pm25 = Math.round(a.pm2_5);
+  const pm10 = Math.round(a.pm10);
+  const oz   = a.ozone.toFixed(1);
+  const g25  = pm25Grade(pm25);
+  const g10  = pm10Grade(pm10);
+  const overall = Math.max(g25, g10);
+  const aqiPct = Math.min(((overall-1)/3)*100, 97);
+
+  const windMs = Math.round(w.wind_speed_10m * 10) / 10;
+
+  let forecastRows = '';
+  for(let i=0; i<7; i++){
+    const pop = daily.precipitation_probability_max[i];
+    const hi  = Math.round(daily.temperature_2m_max[i]);
+    const lo  = Math.round(daily.temperature_2m_min[i]);
+    const ico = wmoIcon(daily.weather_code[i]);
+    const lbl = wmoLabel(daily.weather_code[i]);
+    const popStr = pop > 0 ? `💧${pop}%` : '';
+    forecastRows += `
+      <div class="day-row">
+        <div class="day-name">${dayName(daily.time[i], i)}</div>
+        <div class="day-icon">${ico}</div>
+        <div class="day-desc">${lbl}</div>
+        <div class="day-pop">${popStr}</div>
+        <div class="day-temps">${hi}° <span class="day-lo">/ ${lo}°</span></div>
+      </div>`;
+  }
+
+  document.getElementById('content').innerHTML = `
+    <div class="now-card">
+      <div class="now-top">
+        <div>
+          <div class="now-temp">${Math.round(w.temperature_2m)}<sup>°</sup></div>
+          <div class="now-desc">${wmoLabel(w.weather_code)}</div>
+          <div class="now-feels">체감 ${Math.round(w.apparent_temperature)}°</div>
+        </div>
+        <div class="now-icon">${wmoIcon(w.weather_code)}</div>
+      </div>
+      <div class="now-updated">마지막 갱신 ${timeStr}</div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="metric-icon">💧</div>
+        <div class="metric-val">${w.relative_humidity_2m}<span class="metric-unit">%</span></div>
+        <div class="metric-lbl">습도</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon">💨</div>
+        <div class="metric-val">${windMs}<span class="metric-unit">m/s</span></div>
+        <div class="metric-lbl">바람</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon">🌧️</div>
+        <div class="metric-val">${daily.precipitation_probability_max[0]}<span class="metric-unit">%</span></div>
+        <div class="metric-lbl">강수확률</div>
+      </div>
+    </div>
+
+    <div class="air-card">
+      <div class="section-hd">
+        <h2>대기질</h2>
+        <span class="aqi-badge ${aqiClass(overall)}">${aqiLabel(overall)}</span>
+      </div>
+      <div class="air-grid">
+        <div class="air-item">
+          <div class="air-val" style="color:${['','var(--good)','var(--mod)','var(--bad)','var(--vbad)'][g25]}">${pm25}</div>
+          <div class="air-unit">μg/m³</div>
+          <div class="air-lbl">PM2.5</div>
+        </div>
+        <div class="air-item">
+          <div class="air-val" style="color:${['','var(--good)','var(--mod)','var(--bad)','var(--vbad)'][g10]}">${pm10}</div>
+          <div class="air-unit">μg/m³</div>
+          <div class="air-lbl">PM10</div>
+        </div>
+        <div class="air-item">
+          <div class="air-val" style="color:var(--sub)">${oz}</div>
+          <div class="air-unit">μg/m³</div>
+          <div class="air-lbl">오존</div>
+        </div>
+      </div>
+      <div class="aqi-bar-wrap">
+        <div class="aqi-bar-track">
+          <div class="aqi-bar-dot" style="left:calc(${aqiPct}% - 6px)"></div>
+        </div>
+        <div class="aqi-bar-labels">
+          <span>좋음</span><span>보통</span><span>나쁨</span><span>매우나쁨</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="week-card">
+      <h2>7일 예보</h2>
+      ${forecastRows}
+    </div>
+  `;
+}
+
+async function loadRegion(region){
+  document.getElementById('content').innerHTML = `<div class="loading"><div class="spinner"></div><p>${REGIONS[region].name} 날씨 불러오는 중…</p></div>`;
+  try {
+    cache[region] = await fetchWeather(region);
+    if(cur === region) render(region);
+  } catch(e) {
+    if(cur === region)
+      document.getElementById('content').innerHTML = `<div class="error-box">⚠️ 날씨 데이터를 불러오지 못했습니다.<br>인터넷 연결을 확인하고 새로고침해 주세요.</div>`;
+  }
+}
+
+function switchRegion(idx){
+  cur = idx;
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  if(cache[idx]?.weather) render(idx);
+  else loadRegion(idx);
+}
+
+async function refresh(){
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  cache[cur] = null;
+  await loadRegion(cur);
+  btn.classList.remove('spinning');
+}
+
+function dismissBanner(){
+  document.getElementById('install-banner').style.display='none';
+  localStorage.setItem('banner-dismissed','1');
+}
+
+// 앱 시작
+(function init(){
+  // 사파리에서 홈화면 앱이 아닐 때만 배너 표시
+  const isStandalone = window.navigator.standalone;
+  if(!isStandalone && !localStorage.getItem('banner-dismissed')){
+    document.getElementById('install-banner').style.display='flex';
+  }
+
+  // 두 지역 동시 로드
+  loadRegion(0);
+  loadRegion(1);
+
+  // 30분마다 자동 갱신
+  setInterval(()=>{ cache=[{},{}]; loadRegion(cur); }, 30*60*1000);
+})();
+</script>
+</body>
+</html>
